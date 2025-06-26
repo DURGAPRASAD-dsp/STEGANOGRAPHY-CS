@@ -1,0 +1,151 @@
+import cv2
+import numpy as np
+import csv
+import os
+import hashlib
+from getpass import getpass
+from datetime import datetime
+import matplotlib.pyplot as plt
+from termcolor import cprint
+
+# ASCII character maps
+d = {chr(i): i for i in range(255)}
+c = {i: chr(i) for i in range(255)}
+
+# Pretty print log with timestamp
+def log(msg, color="cyan"):
+    time = datetime.now().strftime("%H:%M:%S")
+    cprint(f"[{time}] {msg}", color)
+
+# Save metadata (hashed key + length)
+def save_data(hashkey, length):
+    with open('data.csv', 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow([hashkey, length])
+
+# Visualize difference between original and encrypted
+def show_difference(original, encrypted):
+    diff = cv2.absdiff(original, encrypted)
+    gray_diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+    plt.imshow(gray_diff, cmap='hot')
+    plt.title("Encrypted Pixel Difference Map")
+    plt.colorbar()
+    plt.show()
+
+# Encryption Function
+def encrypt():
+    key = hashlib.md5(getpass("Enter Steganography key: ").encode()).hexdigest()
+    confirm_key = hashlib.md5(getpass("Re-enter Steganography key: ").encode()).hexdigest()
+
+    if key != confirm_key:
+        log("Keys do not match. Try again.", "red")
+        return encrypt()
+
+    img_path = input("Enter image path (recommended PNG): ").strip('"')
+    original = cv2.imread(img_path)
+    if original is None:
+        log("Failed to load image.", "red")
+        return
+
+    h = original.copy()
+    text = input("Enter secret message: ")
+    l = len(text)
+
+    kl = 0
+    x = y = z = 0
+    for i in range(l):
+        h[x, y, z] = d[text[i]] ^ d[key[kl]]
+        x += 1
+        y += 1
+        y = (y + 1) % 3
+        kl = (kl + 1) % len(key)
+
+    out_path = "encrypted_img.png"
+    cv2.imwrite(out_path, h)
+    save_data(key, l)
+
+    log("Encryption complete.", "green")
+    log(f"Secret length: {l} characters", "yellow")
+    log(f"Encrypted image saved: {out_path}", "blue")
+    log("Metadata saved as: data.csv", "blue")
+
+    show_difference(original, h)
+
+# Decryption Function
+def decrypt():
+    img_path = input("Enter path of encrypted image (PNG): ").strip('"')
+    h = cv2.imread(img_path)
+    if h is None:
+        log("Error loading image.", "red")
+        return
+
+    csv_path = input("Enter path to metadata file (data.csv): ").strip('"')
+    try:
+        with open(csv_path, 'r') as file:
+            reader = csv.reader(file)
+            data = list(reader)
+        stored_key, l = data[0][0], int(data[0][1])
+    except:
+        log("Error loading metadata CSV.", "red")
+        return
+
+    while True:
+        dkey = hashlib.md5(getpass("Enter Steganography key: ").encode()).hexdigest()
+        if dkey == stored_key:
+            log("Key verified. Proceeding with decryption...", "green")
+            break
+        else:
+            log("Incorrect key. Please try again.", "red")
+
+    kl = 0
+    x = y = z = 0
+    hiddnmsg = ""
+
+    for i in range(l):
+        hiddnmsg += c[h[x, y, z] ^ d[dkey[kl]]]
+        x += 1
+        y += 1
+        y = (y + 1) % 3
+        kl = (kl + 1) % len(dkey)
+
+    os.remove(csv_path)
+    log("Decryption complete.", "green")
+    cprint("Hidden Message: " + hiddnmsg, "magenta", attrs=["bold"])
+
+# Main menu
+def main():
+    cprint("\nImage Steganography using XOR Encryption", "yellow", attrs=["bold"])
+    cprint("1. Encrypt a message", "cyan")
+    cprint("2. Decrypt a message", "cyan")
+    choice = input("Choose an option (1/2): ").strip()
+
+    if choice == '1':
+        encrypt()
+        next_step = input("\nDo you want to decrypt the message now? (y/n): ").strip().lower()
+        if next_step == 'y':
+            decrypt()
+        else:
+            log("You chose not to decrypt now.", "yellow")
+    elif choice == '2':
+        decrypt()
+    else:
+        log("Invalid choice. Exiting.", "red")
+
+if __name__ == "__main__":
+    main()
+
+Image Steganography using XOR Encryption
+1. Encrypt a message
+2. Decrypt a message
+[22:58:49] Encryption complete.
+[22:58:49] Secret length: 3 characters
+[22:58:49] Encrypted image saved: encrypted_img.png
+[22:58:49] Metadata saved as: data.csv
+No description has been provided for this image
+[22:59:24] Incorrect key. Please try again.
+[22:59:27] Incorrect key. Please try again.
+[22:59:31] Incorrect key. Please try again.
+[22:59:39] Key verified. Proceeding with decryption...
+[22:59:39] Decryption complete.
+Hidden Message: øúþ
+ 
